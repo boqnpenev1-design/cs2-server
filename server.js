@@ -26,6 +26,22 @@ const DUST2_SPAWNS = {
   ]
 };
 
+const KILL_REWARDS = {
+  knife: 1500,
+  // SMGs: $600
+  mp9: 600, mac10: 600, mp7: 600, mp5: 600, mp5sd: 600, ump45: 600, p90: 600, bizon: 600,
+  // Shotguns: $900
+  nova: 900, xm1014: 900, mag7: 900, sawedoff: 900,
+  // Rifles: $300
+  galil: 300, famas: 300, ak47: 300, m4a4: 300, m4a1s: 300, ssg08: 300, sg553: 300, aug: 300, g3sg1: 300, scar20: 300,
+  // Snipers: AWP $100
+  awp: 100,
+  // Pistols: $300
+  glock: 300, usp: 300, usps: 300, p2000: 300, p250: 300, tec9: 300, fiveseven: 300, deagle: 300, cz75: 300, revolver: 300,
+  // Special/grenades
+  hegrenade: 300, molotov: 300, incgrenade: 300, c4: 0
+};
+
 // ============================================================================
 // ROOM & MATCH STATE (Authoritative In-Memory Game Simulation)
 // ============================================================================
@@ -44,6 +60,8 @@ class GameRoom {
     this.maxRounds = 24; // MR12 competitive format
     this.ctScore = 0;
     this.tScore = 0;
+    this.consecutiveLosses = { CT: 0, T: 0 };
+    this.c4PlantedThisRound = false;
 
     // C4 Bomb State
     this.c4CarrierId = null;
@@ -210,6 +228,7 @@ class GameRoom {
     const tempScore = this.ctScore;
     this.ctScore = this.tScore;
     this.tScore = tempScore;
+    this.consecutiveLosses = { CT: 0, T: 0 };
 
     // Swap players & reset economy
     for (const p of this.players.values()) {
@@ -218,6 +237,9 @@ class GameRoom {
       p.money = 800; // Reset pistol round cash
       p.hasHelmet = false;
       p.armor = 0;
+      p.purchases = [];
+      p.fired = {};
+      p.transactions = [{ type: 'halftime', amount: 800, balance: 800, reason: 'Halftime reset', t: Date.now() }];
     }
 
     this.broadcast({
@@ -235,6 +257,7 @@ class GameRoom {
     this.phaseTimer = 15;
     this.phaseEndTime = Date.now() + 15000;
     this.c4Planted = false;
+    this.c4PlantedThisRound = false;
     this.c4Site = null;
     this.c4Pos = null;
     this.c4DefuseProgress = 0;
@@ -250,6 +273,8 @@ class GameRoom {
       p.inMatch = true;
       p.health = 100;
       p.hasC4 = false;
+      p.purchases = [];
+      p.fired = {};
       const teamSpawns = DUST2_SPAWNS[p.team] || DUST2_SPAWNS.T;
       const sIdx = (p.team === 'CT') ? (ctIdx++ % teamSpawns.length) : (tIdx++ % teamSpawns.length);
       const sp = teamSpawns[sIdx];
@@ -287,8 +312,15 @@ class GameRoom {
     this.phaseTimer = 5;
     this.phaseEndTime = Date.now() + 5000;
 
-    if (winnerTeam === 'CT') this.ctScore++;
-    else if (winnerTeam === 'T') this.tScore++;
+    if (winnerTeam === 'CT') {
+      this.ctScore++;
+      this.consecutiveLosses.CT = 0;
+      this.consecutiveLosses.T++;
+    } else if (winnerTeam === 'T') {
+      this.tScore++;
+      this.consecutiveLosses.T = 0;
+      this.consecutiveLosses.CT++;
+    }
 
     // Calculate MVP of this round
     let roundMvp = null;
@@ -300,14 +332,41 @@ class GameRoom {
       }
     }
 
-    // Economic rewards (CS2 economy)
+    // Economic rewards (CS2 authentic economy: win $3250, loss $1400+$500/streak max $3400, plant reward $800, cap $16000)
     for (const p of this.players.values()) {
       p.roundDamage = 0;
+      p.transactions = p.transactions || [];
       if (p.team === winnerTeam) {
         p.money = Math.min(16000, p.money + 3250);
+        p.transactions.push({
+          type: 'round_win',
+          amount: 3250,
+          balance: p.money,
+          reason: 'Round win bonus',
+          t: Date.now()
+        });
       } else {
-        p.money = Math.min(16000, p.money + 1400); // Loss bonus baseline
+        const streak = this.consecutiveLosses[p.team] || 1;
+        const priorLosses = Math.max(0, Math.min(4, streak - 1));
+        let lossBonus = 1400 + priorLosses * 500;
+        if (lossBonus > 3400) lossBonus = 3400;
+
+        let totalBonus = lossBonus;
+        let reasonStr = `Round loss (streak ${streak}: $${lossBonus})`;
+        if (p.team === 'T' && this.c4PlantedThisRound) {
+          totalBonus += 800;
+          reasonStr += ' + Bomb plant ($800)';
+        }
+        p.money = Math.min(16000, p.money + totalBonus);
+        p.transactions.push({
+          type: 'round_loss',
+          amount: totalBonus,
+          balance: p.money,
+          reason: reasonStr,
+          t: Date.now()
+        });
       }
+      if (p.transactions.length > 20) p.transactions.shift();
     }
 
     this.broadcast({
@@ -365,7 +424,18 @@ class GameRoom {
   onBombDefused(defuserId) {
     this.c4Planted = false;
     const defuser = this.players.get(defuserId);
-    if (defuser) defuser.money = Math.min(16000, defuser.money + 300);
+    if (defuser) {
+      defuser.money = Math.min(16000, defuser.money + 300);
+      defuser.transactions = defuser.transactions || [];
+      defuser.transactions.push({
+        type: 'defuse',
+        amount: 300,
+        balance: defuser.money,
+        reason: 'Bomb defusal reward',
+        t: Date.now()
+      });
+      if (defuser.transactions.length > 20) defuser.transactions.shift();
+    }
 
     this.broadcast({
       type: 'bomb_defused',
@@ -423,7 +493,8 @@ class GameRoom {
         hasC4: p.hasC4,
         kills: p.kills,
         deaths: p.deaths,
-        money: p.money
+        money: p.money,
+        transactions: p.transactions ? p.transactions.slice(-5) : []
       });
     }
 
@@ -501,6 +572,9 @@ class GameRoom {
       armor: 0,
       hasHelmet: false,
       money: 800,
+      purchases: [],
+      transactions: [{ type: 'init', amount: 800, balance: 800, reason: 'Initial money', t: Date.now() }],
+      fired: {},
       kills: 0,
       deaths: 0,
       roundDamage: 0,
@@ -720,17 +794,132 @@ wss.on('connection', (ws, req) => {
         break;
 
       case 'buy_item':
-        if (player && dust2Room.phase === 'freeze') {
-          player.lastInputAt = Date.now();
-          const cost = Number(packet.cost) || 0;
-          if (player.money >= cost) {
-            player.money -= cost;
-            player.activeWeapon = packet.weaponId || player.activeWeapon;
-            ws.send(JSON.stringify({
-              type: 'buy_success',
-              weaponId: packet.weaponId,
-              remainingMoney: player.money
-            }));
+        if (!player) break;
+        player.lastInputAt = Date.now();
+        const cost = Number(packet.cost) || 0;
+        const buyWepId = packet.weaponId;
+        if (dust2Room.phase !== 'freeze') {
+          ws.send(JSON.stringify({
+            type: 'buy_error',
+            weaponId: buyWepId,
+            reason: 'Can only purchase during freeze time'
+          }));
+          break;
+        }
+        if (player.money < cost || cost <= 0) {
+          ws.send(JSON.stringify({
+            type: 'buy_error',
+            weaponId: buyWepId,
+            reason: 'Insufficient funds'
+          }));
+          break;
+        }
+        player.money -= cost;
+        player.activeWeapon = buyWepId || player.activeWeapon;
+        player.purchases = player.purchases || [];
+        player.transactions = player.transactions || [];
+        const purchase = {
+          id: `purch_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          weaponId: buyWepId,
+          cost: cost,
+          slot: packet.slot || 1,
+          round: dust2Room.currentRound,
+          dropped: false,
+          fired: false,
+          refunded: false,
+          timestamp: Date.now()
+        };
+        player.purchases.push(purchase);
+        player.transactions.push({
+          type: 'buy',
+          amount: -cost,
+          balance: player.money,
+          reason: `Bought ${buyWepId}`,
+          t: Date.now()
+        });
+        if (player.transactions.length > 20) player.transactions.shift();
+        ws.send(JSON.stringify({
+          type: 'buy_success',
+          weaponId: buyWepId,
+          cost: cost,
+          slot: packet.slot || 1,
+          remainingMoney: player.money,
+          transactions: player.transactions.slice(-5)
+        }));
+        break;
+
+      case 'refund_item':
+        if (!player) break;
+        player.lastInputAt = Date.now();
+        const refWepId = packet.weaponId;
+        if (dust2Room.phase !== 'freeze') {
+          ws.send(JSON.stringify({
+            type: 'refund_error',
+            weaponId: refWepId,
+            reason: 'Refunds only allowed during freeze time'
+          }));
+          break;
+        }
+        player.purchases = player.purchases || [];
+        player.fired = player.fired || {};
+        const eligIdx = player.purchases.findIndex(p =>
+          p.weaponId === refWepId &&
+          p.round === dust2Room.currentRound &&
+          !p.refunded
+        );
+        if (eligIdx === -1) {
+          ws.send(JSON.stringify({
+            type: 'refund_error',
+            weaponId: refWepId,
+            reason: 'No eligible purchase this round'
+          }));
+          break;
+        }
+        const elig = player.purchases[eligIdx];
+        if (elig.dropped) {
+          ws.send(JSON.stringify({
+            type: 'refund_error',
+            weaponId: refWepId,
+            reason: 'Cannot refund dropped weapon'
+          }));
+          break;
+        }
+        if (elig.fired || player.fired[refWepId]) {
+          ws.send(JSON.stringify({
+            type: 'refund_error',
+            weaponId: refWepId,
+            reason: 'Cannot refund weapon after firing'
+          }));
+          break;
+        }
+        elig.refunded = true;
+        player.money = Math.min(16000, player.money + elig.cost);
+        player.transactions = player.transactions || [];
+        player.transactions.push({
+          type: 'refund',
+          amount: elig.cost,
+          balance: player.money,
+          reason: `Refunded ${refWepId}`,
+          t: Date.now()
+        });
+        if (player.transactions.length > 20) player.transactions.shift();
+        ws.send(JSON.stringify({
+          type: 'refund_success',
+          weaponId: refWepId,
+          refundAmount: elig.cost,
+          remainingMoney: player.money,
+          slot: elig.slot,
+          transactions: player.transactions.slice(-5)
+        }));
+        break;
+
+      case 'weapon_fired':
+        if (player && packet.weaponId) {
+          player.fired = player.fired || {};
+          player.fired[packet.weaponId] = true;
+          if (player.purchases) {
+            const pObj = player.purchases.find(p => p.weaponId === packet.weaponId && !p.refunded);
+            if (pObj) pObj.fired = true;
           }
         }
         break;
@@ -781,6 +970,14 @@ wss.on('connection', (ws, req) => {
           player.lastInputAt = Date.now();
           const target = dust2Room.players.get(packet.targetId);
           if (target && target.isAlive && target.team !== player.team) {
+            const wepKey = String(packet.weapon || player.activeWeapon || 'ak47').toLowerCase();
+            player.fired = player.fired || {};
+            player.fired[wepKey] = true;
+            if (player.purchases) {
+              const pObj = player.purchases.find(p => p.weaponId === wepKey && !p.refunded);
+              if (pObj) pObj.fired = true;
+            }
+
             const dmg = Math.max(1, Math.min(120, Number(packet.damage) || 20));
             target.health = Math.max(0, target.health - dmg);
             player.roundDamage += dmg;
@@ -797,7 +994,17 @@ wss.on('connection', (ws, req) => {
               target.isAlive = false;
               target.deaths++;
               player.kills++;
-              player.money = Math.min(16000, player.money + 300);
+              const reward = (KILL_REWARDS[wepKey] !== undefined) ? KILL_REWARDS[wepKey] : 300;
+              player.money = Math.min(16000, player.money + reward);
+              player.transactions = player.transactions || [];
+              player.transactions.push({
+                type: 'kill',
+                amount: reward,
+                balance: player.money,
+                reason: `Kill with ${wepKey} (+$${reward})`,
+                t: Date.now()
+              });
+              if (player.transactions.length > 20) player.transactions.shift();
 
               // If target was carrying C4, drop on ground
               if (target.hasC4) {
@@ -826,6 +1033,10 @@ wss.on('connection', (ws, req) => {
       case 'drop_weapon':
         if (player && player.isAlive && packet.weaponId) {
           player.lastInputAt = Date.now();
+          if (player.purchases) {
+            const pObj = player.purchases.slice().reverse().find(p => p.weaponId === packet.weaponId && !p.refunded && !p.dropped);
+            if (pObj) pObj.dropped = true;
+          }
           const dropItem = {
             id: `drop_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             weaponId: packet.weaponId,
