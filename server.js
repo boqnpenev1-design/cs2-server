@@ -128,38 +128,42 @@ class GameRoom {
   updateClock() {
     if (this.players.size === 0) return;
     const now = Date.now();
-    const remaining = Math.max(0, Math.ceil((this.phaseEndTime - now) / 1000));
-    this.phaseTimer = remaining;
 
-    // Check C4 Detonation
-    if (this.c4Planted && now >= this.c4ExplodeTime && this.phase === 'live') {
-      this.onBombExploded();
-      return;
-    }
+    // Check C4 Detonation & Bomb Clock Override
+    if (this.c4Planted) {
+      const bombRemaining = Math.max(0, Math.ceil((this.c4ExplodeTime - now) / 1000));
+      this.phaseTimer = bombRemaining;
 
-    // Phase Transitions
-    if (remaining <= 0) {
-      if (this.phase === 'freeze') {
-        // Freeze time ended -> Go live
-        this.phase = 'live';
-        this.phaseTimer = 115; // 1:55 live round time
-        this.phaseEndTime = now + 115000;
-        this.broadcast({
-          type: 'phase_change',
-          phase: 'live',
-          timer: 115,
-          phaseEndTime: this.phaseEndTime
-        });
-      } else if (this.phase === 'live') {
-        // Live round expired without bomb plant -> CT wins (or T if no CT players exist)
-        if (!this.c4Planted) {
+      if (now >= this.c4ExplodeTime && this.phase === 'live') {
+        this.onBombExploded();
+        return;
+      }
+    } else {
+      const remaining = Math.max(0, Math.ceil((this.phaseEndTime - now) / 1000));
+      this.phaseTimer = remaining;
+
+      // Phase Transitions
+      if (remaining <= 0) {
+        if (this.phase === 'freeze') {
+          // Freeze time ended -> Go live
+          this.phase = 'live';
+          this.phaseTimer = 115; // 1:55 live round time
+          this.phaseEndTime = now + 115000;
+          this.broadcast({
+            type: 'phase_change',
+            phase: 'live',
+            timer: 115,
+            phaseEndTime: this.phaseEndTime
+          });
+        } else if (this.phase === 'live') {
+          // Live round expired without bomb plant -> CT wins (or T if no CT players exist)
           const totalCT = Array.from(this.players.values()).filter(p => p.team === 'CT').length;
           const winner = (totalCT > 0) ? 'CT' : 'T';
           this.endRound(winner, 'TARGET_PRESERVED');
+        } else if (this.phase === 'round_over') {
+          // Next round initiation
+          this.startNextRound();
         }
-      } else if (this.phase === 'round_over') {
-        // Next round initiation
-        this.startNextRound();
       }
     }
 
@@ -700,12 +704,12 @@ wss.on('connection', (ws, req) => {
         break;
 
       case 'plant_c4':
-        if (player && player.isAlive && player.hasC4 && !dust2Room.c4Planted) {
+        if (player && player.isAlive && (player.hasC4 || player.team === 'T') && !dust2Room.c4Planted) {
           player.lastInputAt = Date.now();
           dust2Room.c4Planted = true;
           dust2Room.c4CarrierId = null;
           player.hasC4 = false;
-          dust2Room.c4Site = packet.site || 'B';
+          dust2Room.c4Site = packet.site || 'A';
           dust2Room.c4Pos = packet.pos || player.pos;
           dust2Room.c4PlantTime = Date.now();
           dust2Room.c4ExplodeTime = Date.now() + 40000; // 40s authentic C4 timer
