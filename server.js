@@ -723,6 +723,40 @@ wss.on('connection', (ws, req) => {
         }
         break;
 
+      case 'drop_weapon':
+        if (player && player.isAlive && packet.weaponId) {
+          player.lastInputAt = Date.now();
+          const dropItem = {
+            id: `drop_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            weaponId: packet.weaponId,
+            slot: packet.slot || 1,
+            pos: packet.pos || player.pos,
+            droppedBy: player.id
+          };
+          dust2Room.droppedItems.push(dropItem);
+          dust2Room.broadcast({
+            type: 'item_dropped',
+            item: dropItem
+          });
+        }
+        break;
+
+      case 'pickup_weapon':
+        if (player && player.isAlive && packet.weaponId) {
+          player.lastInputAt = Date.now();
+          const idx = dust2Room.droppedItems.findIndex(d => d.weaponId === packet.weaponId);
+          if (idx !== -1) {
+            const picked = dust2Room.droppedItems.splice(idx, 1)[0];
+            dust2Room.broadcast({
+              type: 'item_picked_up',
+              itemId: picked.id,
+              weaponId: picked.weaponId,
+              pickerId: player.id
+            });
+          }
+        }
+        break;
+
       case 'pickup_c4':
         if (player && player.isAlive && player.team === 'T' && !dust2Room.c4Planted && !dust2Room.c4CarrierId) {
           player.lastInputAt = Date.now();
