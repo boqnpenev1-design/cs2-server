@@ -151,9 +151,11 @@ class GameRoom {
           phaseEndTime: this.phaseEndTime
         });
       } else if (this.phase === 'live') {
-        // Live round expired without bomb plant -> CT wins
+        // Live round expired without bomb plant -> CT wins (or T if no CT players exist)
         if (!this.c4Planted) {
-          this.endRound('CT', 'TARGET_PRESERVED');
+          const totalCT = Array.from(this.players.values()).filter(p => p.team === 'CT').length;
+          const winner = (totalCT > 0) ? 'CT' : 'T';
+          this.endRound(winner, 'TARGET_PRESERVED');
         }
       } else if (this.phase === 'round_over') {
         // Next round initiation
@@ -429,7 +431,26 @@ class GameRoom {
 
     const shouldSpawn = isFirstPlayer || (this.phase === 'freeze');
 
-    const playerTeam = (team === 'T') ? 'T' : 'CT';
+    // Auto-balance teams: first player T, second CT, keeping counts balanced
+    let tCount = 0;
+    let ctCount = 0;
+    for (const p of this.players.values()) {
+      if (p.team === 'T') tCount++;
+      else ctCount++;
+    }
+
+    let assignedTeam = (team === 'T') ? 'T' : 'CT';
+    if (this.players.size === 0) {
+      assignedTeam = 'T'; // First player is Terrorist
+    } else if (this.players.size === 1) {
+      const firstPlayer = Array.from(this.players.values())[0];
+      assignedTeam = (firstPlayer.team === 'T') ? 'CT' : 'T'; // Second player opposes first
+    } else {
+      if (tCount < ctCount) assignedTeam = 'T';
+      else if (ctCount < tCount) assignedTeam = 'CT';
+    }
+
+    const playerTeam = assignedTeam;
     const teamSpawns = DUST2_SPAWNS[playerTeam] || DUST2_SPAWNS.T;
     const initialSpawn = teamSpawns[0];
 
@@ -640,12 +661,25 @@ wss.on('connection', (ws, req) => {
       case 'select_team':
         if (player) {
           player.lastInputAt = Date.now();
-          player.team = (packet.team === 'T') ? 'T' : 'CT';
-          dust2Room.broadcast({
-            type: 'team_swapped',
-            id: playerId,
-            team: player.team
-          });
+          const targetTeam = (packet.team === 'T') ? 'T' : 'CT';
+          let otherT = 0, otherCT = 0;
+          for (const [pId, p] of dust2Room.players.entries()) {
+            if (pId !== playerId) {
+              if (p.team === 'T') otherT++;
+              else otherCT++;
+            }
+          }
+          const wouldBeT = (targetTeam === 'T') ? otherT + 1 : otherT;
+          const wouldBeCT = (targetTeam === 'CT') ? otherCT + 1 : otherCT;
+          // Only permit change if team sizes remain balanced
+          if (Math.abs(wouldBeT - wouldBeCT) <= 1 || (otherT === 0 && otherCT === 0)) {
+            player.team = targetTeam;
+            dust2Room.broadcast({
+              type: 'team_swapped',
+              id: playerId,
+              team: player.team
+            });
+          }
         }
         break;
 
