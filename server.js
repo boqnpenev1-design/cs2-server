@@ -109,6 +109,7 @@ class GameRoom {
   }
 
   updateClock() {
+    if (this.players.size === 0) return;
     const now = Date.now();
     const remaining = Math.max(0, Math.ceil((this.phaseEndTime - now) / 1000));
     this.phaseTimer = remaining;
@@ -381,17 +382,35 @@ class GameRoom {
   }
 
   addPlayer(id, ws, callsign, team = 'CT') {
+    const isFirstPlayer = (this.players.size === 0);
     const cleanCallsign = (typeof callsign === 'string' && callsign.trim().length >= 2)
       ? callsign.trim().substring(0, 16).replace(/[<>&"']/g, '')
       : `Agent_${id.substring(0, 5)}`;
+
+    if (isFirstPlayer) {
+      // First player entering empty room: restart fresh match freeze phase immediately
+      this.currentRound = 1;
+      this.ctScore = 0;
+      this.tScore = 0;
+      this.phase = 'freeze';
+      this.phaseTimer = 15;
+      this.phaseEndTime = Date.now() + 15000;
+      this.c4Planted = false;
+      this.c4CarrierId = (team === 'T') ? id : null;
+      this.c4Pos = null;
+      this.c4Site = null;
+      this.droppedItems = [];
+    }
+
+    const shouldSpawn = isFirstPlayer || (this.phase === 'freeze');
 
     const player = {
       id: id,
       ws: ws,
       callsign: cleanCallsign,
       team: (team === 'T') ? 'T' : 'CT',
-      inMatch: (this.phase === 'freeze'), // Join during freeze = active; during live = spectate
-      isAlive: (this.phase === 'freeze'),
+      inMatch: shouldSpawn,
+      isAlive: shouldSpawn,
       health: 100,
       armor: 0,
       hasHelmet: false,
@@ -400,13 +419,17 @@ class GameRoom {
       deaths: 0,
       roundDamage: 0,
       activeWeapon: 'knife',
-      hasC4: false,
+      hasC4: (team === 'T' && (isFirstPlayer || (!this.c4CarrierId && !this.c4Planted))),
       pos: { x: 0, y: 0, z: 0 },
       yaw: 0,
       pitch: 0,
       crouch: false,
       lastInputAt: Date.now()
     };
+
+    if (player.hasC4) {
+      this.c4CarrierId = id;
+    }
 
     this.players.set(id, player);
     this.startLoops();
