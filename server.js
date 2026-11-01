@@ -9,6 +9,23 @@ const PORT = process.env.PORT || 8080;
 const HOST = '0.0.0.0';
 const startTime = Date.now();
 
+const DUST2_SPAWNS = {
+  CT: [
+    { x: -5.0, y: -3.56, z: -98.0, yaw: Math.PI },
+    { x: -2.0, y: -3.56, z: -96.0, yaw: Math.PI },
+    { x: -8.0, y: -3.56, z: -96.0, yaw: Math.PI },
+    { x: -5.0, y: -3.56, z: -101.0, yaw: Math.PI },
+    { x: -1.0, y: -3.56, z: -100.0, yaw: Math.PI }
+  ],
+  T: [
+    { x: -65.0, y: 7.96, z: 35.0, yaw: 0 },
+    { x: -61.0, y: 7.96, z: 33.0, yaw: 0 },
+    { x: -69.0, y: 7.96, z: 33.0, yaw: 0 },
+    { x: -65.0, y: 7.96, z: 38.0, yaw: 0 },
+    { x: -58.0, y: 7.96, z: 36.0, yaw: 0 }
+  ]
+};
+
 // ============================================================================
 // ROOM & MATCH STATE (Authoritative In-Memory Game Simulation)
 // ============================================================================
@@ -218,13 +235,21 @@ class GameRoom {
     this.c4Defuser = null;
     this.droppedItems = [];
 
-    // Respawn all in-match players
+    // Respawn all in-match players with authentic ground spawns
     const livingTs = [];
+    let ctIdx = 0;
+    let tIdx = 0;
     for (const p of this.players.values()) {
       p.isAlive = true;
       p.inMatch = true;
       p.health = 100;
       p.hasC4 = false;
+      const teamSpawns = DUST2_SPAWNS[p.team] || DUST2_SPAWNS.T;
+      const sIdx = (p.team === 'CT') ? (ctIdx++ % teamSpawns.length) : (tIdx++ % teamSpawns.length);
+      const sp = teamSpawns[sIdx];
+      p.pos = { x: sp.x, y: sp.y, z: sp.z };
+      p.yaw = sp.yaw;
+      p.spawnIndex = sIdx;
       if (p.team === 'T') livingTs.push(p);
     }
 
@@ -404,11 +429,15 @@ class GameRoom {
 
     const shouldSpawn = isFirstPlayer || (this.phase === 'freeze');
 
+    const playerTeam = (team === 'T') ? 'T' : 'CT';
+    const teamSpawns = DUST2_SPAWNS[playerTeam] || DUST2_SPAWNS.T;
+    const initialSpawn = teamSpawns[0];
+
     const player = {
       id: id,
       ws: ws,
       callsign: cleanCallsign,
-      team: (team === 'T') ? 'T' : 'CT',
+      team: playerTeam,
       inMatch: shouldSpawn,
       isAlive: shouldSpawn,
       health: 100,
@@ -419,10 +448,11 @@ class GameRoom {
       deaths: 0,
       roundDamage: 0,
       activeWeapon: 'knife',
-      hasC4: (team === 'T' && (isFirstPlayer || (!this.c4CarrierId && !this.c4Planted))),
-      pos: { x: 0, y: 0, z: 0 },
-      yaw: 0,
+      hasC4: (playerTeam === 'T' && (isFirstPlayer || (!this.c4CarrierId && !this.c4Planted))),
+      pos: { x: initialSpawn.x, y: initialSpawn.y, z: initialSpawn.z },
+      yaw: initialSpawn.yaw,
       pitch: 0,
+      spawnIndex: 0,
       crouch: false,
       lastInputAt: Date.now()
     };
