@@ -323,10 +323,42 @@ class GameRoom {
 
   onBombExploded() {
     this.c4Planted = false;
+    const bombPos = this.c4Pos || { x: 0, y: 0, z: 0 };
     this.broadcast({
       type: 'bomb_exploded',
-      pos: this.c4Pos
+      pos: bombPos
     });
+
+    // Authoritative explosion damage calculation for all alive players
+    for (const player of this.players.values()) {
+      if (player.isAlive && player.pos) {
+        const dx = player.pos.x - bombPos.x;
+        const dy = player.pos.y - bombPos.y;
+        const dz = player.pos.z - bombPos.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist < 50) {
+          const factor = Math.pow(Math.max(0, 1 - dist / 50), 1.5);
+          const blastDamage = Math.round(500 * factor);
+          player.hp = Math.max(0, player.hp - blastDamage);
+          if (player.hp <= 0) {
+            player.isAlive = false;
+            player.deaths++;
+            this.broadcast({
+              type: 'player_killed',
+              attackerId: this.c4CarrierId || 'c4',
+              attackerName: 'C4 Explosive',
+              attackerTeam: 'T',
+              victimId: player.id,
+              victimName: player.callsign,
+              victimTeam: player.team,
+              weapon: 'c4',
+              isHeadshot: false
+            });
+          }
+        }
+      }
+    }
+
     this.endRound('T', 'TARGET_DESTROYED');
   }
 
