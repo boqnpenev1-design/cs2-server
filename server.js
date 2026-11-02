@@ -97,16 +97,16 @@ const WEAPON_REGISTRY = {
 
 function isInsideBombsite(pos) {
   if (!pos) return null;
-  // Bombsite A: center (51.85, 4.32, -108.7), radius 12m or bounding box
+  // Bombsite A: center (51.85, 4.32, -108.7), radius 16m or expanded bounding box
   const distA = Math.hypot(pos.x - 51.85, pos.z - (-108.7));
-  const inA = (distA <= 12.0 && Math.abs((pos.y || 4.32) - 4.32) < 4.5) ||
-              (pos.x >= 44.0 && pos.x <= 60.0 && pos.z >= -116.0 && pos.z <= -102.0 && pos.y >= 2.0 && pos.y <= 7.5);
+  const inA = (distA <= 16.0 && Math.abs((pos.y || 4.32) - 4.32) < 5.0) ||
+              (pos.x >= 36.0 && pos.x <= 68.0 && pos.z >= -125.0 && pos.z <= -95.0 && pos.y >= 0.5 && pos.y <= 9.0);
   if (inA) return 'A';
 
-  // Bombsite B: center (-72.0, 0.0, -121.0), radius 13m or bounding box
+  // Bombsite B: center (-72.0, 0.0, -121.0), radius 16m or expanded bounding box
   const distB = Math.hypot(pos.x - (-72.0), pos.z - (-121.0));
-  const inB = (distB <= 13.0 && Math.abs((pos.y || 0) - 0.0) < 4.5) ||
-              (pos.x >= -82.0 && pos.x <= -63.0 && pos.z >= -130.0 && pos.z <= -112.0 && pos.y >= -1.5 && pos.y <= 5.0);
+  const inB = (distB <= 16.0 && Math.abs((pos.y || 0) - 0.0) < 5.0) ||
+              (pos.x >= -85.0 && pos.x <= -60.0 && pos.z >= -132.0 && pos.z <= -110.0 && pos.y >= -2.0 && pos.y <= 6.0);
   if (inB) return 'B';
 
   return null;
@@ -1019,9 +1019,9 @@ wss.on('connection', (ws, req) => {
 
         const now = Date.now();
         const isFreeze = (dust2Room.phase === 'freeze');
-        const isLiveBuy = (dust2Room.phase === 'live' && (now - dust2Room.liveStartTime <= 20000));
+        const isLiveBuy = (dust2Room.phase === 'live' && (now - dust2Room.liveStartTime <= 15000));
         if (!isFreeze && !isLiveBuy) {
-          const reason = `Buy period expired (freeze or first 20s of live only, phase: ${dust2Room.phase})`;
+          const reason = `Buy period expired (freeze or first 15s of live only, phase: ${dust2Room.phase})`;
           dust2Room.logEvent('BUY_REJECT', `${player.callsign} (${playerId}): ${reason}`);
           ws.send(JSON.stringify({ type: 'buy_error', weaponId: wepId, reason }));
           break;
@@ -1434,20 +1434,46 @@ wss.on('connection', (ws, req) => {
             dust2Room.broadcast({ type: 'c4_dropped', pos: dropPos });
           }
 
-          // Drop victim's primary weapon if owned
+          // Drop victim's weapon on death: primary first, or secondary pistol if no primary
+          let dropWep = null;
+          let dropSlot = 1;
           if (target.inventory && target.inventory[1]) {
-            const dropWep = target.inventory[1];
+            dropWep = target.inventory[1];
+            dropSlot = 1;
             target.inventory[1] = null;
+          } else if (target.inventory && target.inventory[2]) {
+            dropWep = target.inventory[2];
+            dropSlot = 2;
+          }
+          if (dropWep) {
             const dropItem = {
               id: `drop_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
               weaponId: dropWep,
-              slot: 1,
+              slot: dropSlot,
               pos: target.pos || { x: 0, y: 0, z: 0 },
               droppedBy: target.id,
               droppedAt: Date.now()
             };
             dust2Room.droppedItems.push(dropItem);
             dust2Room.broadcast({ type: 'item_dropped', item: dropItem });
+          }
+
+          // Also drop C4 if victim was carrying it
+          if (target.hasC4 || (target.inventory && target.inventory[5] === 'c4')) {
+            target.hasC4 = false;
+            dust2Room.c4CarrierId = null;
+            if (target.inventory) target.inventory[5] = null;
+            const c4Item = {
+              id: `drop_c4_${Date.now()}`,
+              weaponId: 'c4',
+              slot: 5,
+              pos: target.pos || { x: 0, y: 0, z: 0 },
+              droppedBy: target.id,
+              droppedAt: Date.now()
+            };
+            dust2Room.droppedItems.push(c4Item);
+            dust2Room.broadcast({ type: 'item_dropped', item: c4Item });
+            dust2Room.logEvent('C4_DROPPED', `C4 dropped at death of carrier ${target.callsign}`);
           }
 
           dust2Room.broadcast({
