@@ -97,16 +97,16 @@ const WEAPON_REGISTRY = {
 
 function isInsideBombsite(pos) {
   if (!pos) return null;
-  // Bombsite A: center (51.85, 4.32, -108.7), radius 16m or expanded bounding box
+  // Bombsite A: authentic site decal bounds (radius 8.5m around decal center 51.85, -108.7)
   const distA = Math.hypot(pos.x - 51.85, pos.z - (-108.7));
-  const inA = (distA <= 16.0 && Math.abs((pos.y || 4.32) - 4.32) < 5.0) ||
-              (pos.x >= 36.0 && pos.x <= 68.0 && pos.z >= -125.0 && pos.z <= -95.0 && pos.y >= 0.5 && pos.y <= 9.0);
+  const inA = (distA <= 8.5 && Math.abs((pos.y || 4.32) - 4.32) < 4.0) ||
+              (pos.x >= 42.0 && pos.x <= 62.0 && pos.z >= -118.0 && pos.z <= -100.0 && pos.y >= 1.5 && pos.y <= 8.0);
   if (inA) return 'A';
 
-  // Bombsite B: center (-72.0, 0.0, -121.0), radius 16m or expanded bounding box
+  // Bombsite B: authentic site decal bounds (radius 8.5m around decal center -72.0, -121.0)
   const distB = Math.hypot(pos.x - (-72.0), pos.z - (-121.0));
-  const inB = (distB <= 16.0 && Math.abs((pos.y || 0) - 0.0) < 5.0) ||
-              (pos.x >= -85.0 && pos.x <= -60.0 && pos.z >= -132.0 && pos.z <= -110.0 && pos.y >= -2.0 && pos.y <= 6.0);
+  const inB = (distB <= 8.5 && Math.abs((pos.y || 0) - 0.0) < 4.0) ||
+              (pos.x >= -80.0 && pos.x <= -64.0 && pos.z >= -128.0 && pos.z <= -114.0 && pos.y >= -1.5 && pos.y <= 4.5);
   if (inB) return 'B';
 
   return null;
@@ -691,6 +691,15 @@ class GameRoom {
     const cleanCallsign = (typeof callsign === 'string' && callsign.trim().length >= 2)
       ? callsign.trim().substring(0, 16).replace(/[<>&"']/g, '')
       : `Agent_${id.substring(0, 5)}`;
+
+    // Prune any existing stale player session with the same callsign
+    for (const [existingId, p] of this.players.entries()) {
+      if (existingId !== id && p.callsign && p.callsign.toLowerCase() === cleanCallsign.toLowerCase()) {
+        this.logEvent('PRUNE_CLONE', `Pruning stale clone session for ${cleanCallsign} (${existingId})`);
+        this.removePlayer(existingId);
+        this.broadcast({ type: 'player_left', id: existingId });
+      }
+    }
 
     if (isFirstPlayer) {
       this.currentRound = 1;
@@ -1331,7 +1340,17 @@ wss.on('connection', (ws, req) => {
           break;
         }
 
-        const wepKey = String(packet.weapon || player.activeWeapon || 'ak47').toLowerCase();
+        let wepKey = String(packet.weapon || player.activeWeapon || 'ak47').toLowerCase().trim();
+        const wepAliases = {
+          'glock-18': 'glock', 'glock18': 'glock',
+          'usp-s': 'usp', 'usps': 'usp',
+          'desert eagle': 'deagle', 'deserteagle': 'deagle',
+          'ak-47': 'ak47', 'm4a4': 'm4a4', 'm4a1-s': 'm4a1', 'm4a1': 'm4a1',
+          'awp': 'awp', 'ssg 08': 'ssg08', 'ssg08': 'ssg08',
+          'default knife': 'knife', 'knife': 'knife'
+        };
+        if (wepAliases[wepKey]) wepKey = wepAliases[wepKey];
+
         const wepDef = WEAPON_REGISTRY[wepKey];
         if (!wepDef) {
           dust2Room.logEvent('DAMAGE_REJECT', `Unknown weapon in damage_hit: ${wepKey}`);
@@ -1340,6 +1359,8 @@ wss.on('connection', (ws, req) => {
 
         // Verify weapon is in player's server inventory
         player.inventory = player.inventory || {};
+        if (!player.inventory[2]) player.inventory[2] = (player.team === 'CT' ? 'usp' : 'glock');
+        if (!player.inventory[3]) player.inventory[3] = 'knife';
         const hasWep = (player.inventory[1] === wepKey || player.inventory[2] === wepKey || wepKey === 'knife' ||
                         (Array.isArray(player.inventory[4]) && player.inventory[4].includes(wepKey)));
         if (!hasWep && wepKey !== 'knife') {
@@ -1446,11 +1467,12 @@ wss.on('connection', (ws, req) => {
             dropSlot = 2;
           }
           if (dropWep) {
+            const groundDropY = (target.pos && typeof target.pos.y === 'number') ? (target.pos.y - 2.1) : 0;
             const dropItem = {
               id: `drop_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
               weaponId: dropWep,
               slot: dropSlot,
-              pos: target.pos || { x: 0, y: 0, z: 0 },
+              pos: target.pos ? { x: target.pos.x, y: groundDropY, z: target.pos.z } : { x: 0, y: 0, z: 0 },
               droppedBy: target.id,
               droppedAt: Date.now()
             };
@@ -1463,11 +1485,12 @@ wss.on('connection', (ws, req) => {
             target.hasC4 = false;
             dust2Room.c4CarrierId = null;
             if (target.inventory) target.inventory[5] = null;
+            const groundDropY = (target.pos && typeof target.pos.y === 'number') ? (target.pos.y - 2.1) : 0;
             const c4Item = {
               id: `drop_c4_${Date.now()}`,
               weaponId: 'c4',
               slot: 5,
-              pos: target.pos || { x: 0, y: 0, z: 0 },
+              pos: target.pos ? { x: target.pos.x, y: groundDropY, z: target.pos.z } : { x: 0, y: 0, z: 0 },
               droppedBy: target.id,
               droppedAt: Date.now()
             };
@@ -1488,6 +1511,20 @@ wss.on('connection', (ws, req) => {
             isHeadshot
           });
         }
+        break;
+      }
+
+      case 'player_shot': {
+        if (!player || !player.isAlive) break;
+        player.lastInputAt = Date.now();
+        dust2Room.broadcast({
+          type: 'player_shot',
+          shooterId: playerId,
+          weaponId: packet.weaponId || player.activeWeapon || 'ak47',
+          audioType: packet.audioType || 'primary',
+          isSilenced: !!packet.isSilenced,
+          pos: packet.pos || player.pos
+        }, playerId);
         break;
       }
 
