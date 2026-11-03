@@ -804,7 +804,8 @@ class GameRoom {
     }
 
     // Joining player spawns only during freeze or as first player. Otherwise spectators until next round.
-    const shouldSpawn = isFirstPlayer || (this.phase === 'freeze');
+    // Always spawn joining players immediately so multi-tab / 1v1 gameplay is instant
+    const shouldSpawn = true;
 
     // Auto-balance teams
     let tCount = 0;
