@@ -782,13 +782,11 @@ class GameRoom {
       }
     }
 
-    // Prune any existing stale player session with the same callsign
-    for (const [existingId, p] of this.players.entries()) {
-      if (existingId !== id && p.callsign && p.callsign.toLowerCase() === cleanCallsign.toLowerCase()) {
-        this.logEvent('PRUNE_CLONE', `Pruning stale clone session for ${cleanCallsign} (${existingId})`);
-        this.removePlayer(existingId);
-        this.broadcast({ type: 'player_left', id: existingId });
-      }
+    // Disambiguate callsign if already in use by another connected player (supports multi-tab testing)
+    let finalCallsign = cleanCallsign;
+    let disambigCounter = 2;
+    while ([...this.players.values()].some(p => p.callsign && p.callsign.toLowerCase() === finalCallsign.toLowerCase())) {
+      finalCallsign = `${cleanCallsign}_${disambigCounter++}`;
     }
 
     if (isFirstPlayer) {
@@ -834,7 +832,7 @@ class GameRoom {
     const player = {
       id: id,
       ws: ws,
-      callsign: cleanCallsign,
+      callsign: finalCallsign,
       team: playerTeam,
       inMatch: shouldSpawn,
       isAlive: shouldSpawn,
