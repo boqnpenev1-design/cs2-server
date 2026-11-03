@@ -411,8 +411,8 @@ class GameRoom {
 
   setupRoundState() {
     this.phase = 'freeze';
-    this.phaseTimer = 15;
-    this.phaseEndTime = Date.now() + 15000;
+    this.phaseTimer = 5;
+    this.phaseEndTime = Date.now() + 5000;
     this.zeroTimerTicks = 0;
     this.c4Planted = false;
     this.c4PlantedThisRound = false;
@@ -794,8 +794,8 @@ class GameRoom {
       this.ctScore = 0;
       this.tScore = 0;
       this.phase = 'freeze';
-      this.phaseTimer = 15;
-      this.phaseEndTime = Date.now() + 15000;
+      this.phaseTimer = 5;
+      this.phaseEndTime = Date.now() + 5000;
       this.c4Planted = false;
       this.c4CarrierId = (team === 'T') ? id : null;
       this.c4Pos = null;
@@ -807,7 +807,7 @@ class GameRoom {
     // Always spawn joining players immediately so multi-tab / 1v1 gameplay is instant
     const shouldSpawn = true;
 
-    // Auto-balance teams
+    // Respect user's explicit team selection; only auto-balance if team was unspecified
     let tCount = 0;
     let ctCount = 0;
     for (const p of this.players.values()) {
@@ -815,15 +815,9 @@ class GameRoom {
       else ctCount++;
     }
 
-    let assignedTeam = (team === 'T') ? 'T' : 'CT';
-    if (this.players.size === 0) {
-      assignedTeam = 'T'; // First player is Terrorist
-    } else if (this.players.size === 1) {
-      const firstPlayer = Array.from(this.players.values())[0];
-      assignedTeam = (firstPlayer.team === 'T') ? 'CT' : 'T';
-    } else {
-      if (tCount < ctCount) assignedTeam = 'T';
-      else if (ctCount < tCount) assignedTeam = 'CT';
+    let assignedTeam = (team === 'T') ? 'T' : (team === 'CT' ? 'CT' : (tCount <= ctCount ? 'T' : 'CT'));
+    if (this.players.size === 0 && !team) {
+      assignedTeam = 'T'; // First player defaults to Terrorist
     }
 
     const playerTeam = assignedTeam;
@@ -1166,6 +1160,45 @@ wss.on('connection', (ws, req) => {
           dust2Room.logEvent('BUY_REJECT', `${player.callsign} (${playerId}): ${reason}`);
           ws.send(JSON.stringify({ type: 'buy_error', weaponId: wepId, reason }));
           break;
+        }
+
+        // Grenade Inventory Limits: Max 4 total grenades, max 2 Flashbangs, max 1 Smoke, max 1 HE Grenade, max 1 Molotov/Incendiary
+        if (wepDef.slot === 4) {
+          const gList = player.inventory[4] || [];
+          if (gList.length >= 4) {
+            const reason = 'Grenade inventory full (Max 4 grenades)';
+            dust2Room.logEvent('BUY_REJECT', `${player.callsign} (${playerId}): ${reason}`);
+            ws.send(JSON.stringify({ type: 'buy_error', weaponId: wepId, reason }));
+            break;
+          }
+          const flashCount = gList.filter(g => g === 'flashbang').length;
+          if (wepId === 'flashbang' && flashCount >= 2) {
+            const reason = 'Maximum 2 Flashbangs allowed';
+            dust2Room.logEvent('BUY_REJECT', `${player.callsign} (${playerId}): ${reason}`);
+            ws.send(JSON.stringify({ type: 'buy_error', weaponId: wepId, reason }));
+            break;
+          }
+          const heCount = gList.filter(g => g === 'hegrenade').length;
+          if (wepId === 'hegrenade' && heCount >= 1) {
+            const reason = 'Already carrying HE Grenade (Max 1)';
+            dust2Room.logEvent('BUY_REJECT', `${player.callsign} (${playerId}): ${reason}`);
+            ws.send(JSON.stringify({ type: 'buy_error', weaponId: wepId, reason }));
+            break;
+          }
+          const smokeCount = gList.filter(g => g === 'smokegrenade').length;
+          if (wepId === 'smokegrenade' && smokeCount >= 1) {
+            const reason = 'Already carrying Smoke Grenade (Max 1)';
+            dust2Room.logEvent('BUY_REJECT', `${player.callsign} (${playerId}): ${reason}`);
+            ws.send(JSON.stringify({ type: 'buy_error', weaponId: wepId, reason }));
+            break;
+          }
+          const moloCount = gList.filter(g => g === 'molotov' || g === 'incgrenade').length;
+          if ((wepId === 'molotov' || wepId === 'incgrenade') && moloCount >= 1) {
+            const reason = 'Already carrying Molotov/Incendiary (Max 1)';
+            dust2Room.logEvent('BUY_REJECT', `${player.callsign} (${playerId}): ${reason}`);
+            ws.send(JSON.stringify({ type: 'buy_error', weaponId: wepId, reason }));
+            break;
+          }
         }
 
         const price = wepDef.price;
