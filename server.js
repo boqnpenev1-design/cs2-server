@@ -154,6 +154,7 @@ class GameRoom {
     this.tickInterval = null;
     this.snapshotInterval = null;
     this.idleCheckInterval = null;
+    this.heartbeatInterval = null;
     this.zeroTimerTicks = 0;
   }
 
@@ -194,7 +195,23 @@ class GameRoom {
       }
     }, 40);
 
-    // 3. Idle Player Sweep (every 30s)
+    // 3. Heartbeat sweep every 5s: prune zombie connections inactive > 15s
+    this.heartbeatInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [id, p] of this.players.entries()) {
+        if (!p.ws || p.ws.readyState !== WebSocket.OPEN) {
+          this.removePlayer(id);
+          continue;
+        }
+        if (p.lastInputAt && (now - p.lastInputAt > 15000)) {
+          this.logEvent('ZOMBIE_DROP', `Player ${p.callsign} (${id}) zombie connection timed out after 15s`);
+          try { p.ws.terminate(); } catch (e) {}
+          this.removePlayer(id);
+        }
+      }
+    }, 5000);
+
+    // 4. Idle Player Sweep (every 30s)
     this.idleCheckInterval = setInterval(() => this.checkIdlePlayers(), 30000);
 
     this.logEvent('ROOM_START', `Simulation active. Match ID: ${this.matchId}`);
@@ -206,12 +223,16 @@ class GameRoom {
     clearInterval(this.tickInterval);
     clearInterval(this.snapshotInterval);
     clearInterval(this.idleCheckInterval);
+    clearInterval(this.heartbeatInterval);
     this.tickInterval = null;
     this.snapshotInterval = null;
     this.idleCheckInterval = null;
+    this.heartbeatInterval = null;
 
+    this.matchId = Math.random().toString(16).substring(2, 14);
     this.phase = 'freeze';
     this.phaseTimer = 15;
+    this.phaseEndTime = Date.now() + 15000;
     this.currentRound = 1;
     this.ctScore = 0;
     this.tScore = 0;
@@ -221,7 +242,7 @@ class GameRoom {
     this.c4Pos = null;
     this.droppedItems = [];
 
-    this.logEvent('ROOM_SLEEP', 'All players disconnected. Loops paused for Render sleep.');
+    this.logEvent('ROOM_SLEEP', `All players disconnected. Loops paused for Render sleep. Fresh matchId: ${this.matchId}`);
   }
 
   checkIdlePlayers() {
@@ -409,6 +430,7 @@ class GameRoom {
     let ctIdx = 0;
     let tIdx = 0;
     for (const p of this.players.values()) {
+      const survived = (p.survivedRound === true);
       p.isAlive = true;
       p.inMatch = true;
       p.spawnedThisRound = true;
@@ -418,12 +440,28 @@ class GameRoom {
       p.fired = {};
       p.roundDamage = 0;
 
-      // Rebuild baseline inventory if empty
-      p.inventory = p.inventory || {};
-      p.inventory[2] = p.inventory[2] || (p.team === 'CT' ? 'usp' : 'glock');
-      p.inventory[3] = 'knife';
-      p.inventory[5] = null;
+      // Authentic CS Loadout Persistence:
+      // Living players KEEP their weapons, armor, helmet, defuser across rounds!
+      // Dead players respawn with only default sidearm + knife.
+      if (survived && p.inventory) {
+        p.inventory[1] = p.inventory[1] || null;
+        p.inventory[2] = p.inventory[2] || (p.team === 'CT' ? 'usp' : 'glock');
+        p.inventory[3] = 'knife';
+        p.inventory[5] = null;
+      } else {
+        p.inventory = {
+          1: null,
+          2: (p.team === 'CT' ? 'usp' : 'glock'),
+          3: 'knife',
+          4: [],
+          5: null
+        };
+        p.armor = 0;
+        p.hasHelmet = false;
+        p.hasDefuseKit = false;
+      }
       p.activeWeapon = p.inventory[1] || p.inventory[2] || 'knife';
+      p.survivedRound = false;
 
       const teamSpawns = DUST2_SPAWNS[p.team] || DUST2_SPAWNS.T;
       const sIdx = (p.team === 'CT') ? (ctIdx++ % teamSpawns.length) : (tIdx++ % teamSpawns.length);
@@ -454,7 +492,16 @@ class GameRoom {
       phaseEndTime: this.phaseEndTime,
       ctScore: this.ctScore,
       tScore: this.tScore,
-      c4CarrierId: this.c4CarrierId
+      c4CarrierId: this.c4CarrierId,
+      players: Array.from(this.players.values()).map(p => ({
+        id: p.id,
+        team: p.team,
+        inventory: p.inventory,
+        armor: p.armor || 0,
+        hasHelmet: !!p.hasHelmet,
+        hasDefuseKit: !!p.hasDefuseKit,
+        money: p.money
+      }))
     });
   }
 
@@ -463,6 +510,11 @@ class GameRoom {
     if (this.phase === 'round_over') {
       this.logEvent('END_ROUND_IGNORED', `Duplicate call in round_over ignored: winner=${winnerTeam}, reason=${reason}`);
       return;
+    }
+
+    // Record round survival before state transition
+    for (const p of this.players.values()) {
+      p.survivedRound = (p.isAlive === true);
     }
 
     this.phase = 'round_over';
@@ -670,8 +722,11 @@ class GameRoom {
     const snapshot = {
       type: 'snapshot',
       t: Date.now(),
+      serverTime: Date.now(),
       phase: this.phase,
       timer: this.phaseTimer,
+      phaseEndTime: this.phaseEndTime,
+      matchId: this.matchId,
       ctScore: this.ctScore,
       tScore: this.tScore,
       round: this.currentRound,
@@ -948,7 +1003,21 @@ wss.on('connection', (ws, req) => {
       case 'player_input':
         if (player) {
           player.lastInputAt = Date.now();
-          if (packet.pos) player.pos = packet.pos;
+          if (packet.pos) {
+            const p = packet.pos;
+            const inBounds = (typeof p.x === 'number' && typeof p.y === 'number' && typeof p.z === 'number' &&
+              p.x >= -96.0 && p.x <= 70.0 && p.y >= -14.0 && p.y <= 18.0 && p.z >= -138.0 && p.z <= 50.0);
+            if (!inBounds) {
+              dust2Room.logEvent('OUT_OF_BOUNDS', `${player.callsign} tried moving out of bounds (${p.x?.toFixed(1)}, ${p.y?.toFixed(1)}, ${p.z?.toFixed(1)})`);
+              ws.send(JSON.stringify({
+                type: 'position_correction',
+                pos: player.pos,
+                reason: 'OUT_OF_BOUNDS'
+              }));
+            } else {
+              player.pos = packet.pos;
+            }
+          }
           if (packet.yaw !== undefined) player.yaw = packet.yaw;
           if (packet.pitch !== undefined) player.pitch = packet.pitch;
           if (packet.crouch !== undefined) player.crouch = !!packet.crouch;
