@@ -31,82 +31,78 @@ const DUST2_SPAWNS = {
 // ============================================================================
 const WEAPON_REGISTRY = {
   // Pistols (Slot 2)
-  glock:        { price: 200,  team: 'T',   slot: 2, reward: 300,  damage: 28,  fireRate: 150, headshotMult: 4.0 },
-  usp:          { price: 200,  team: 'CT',  slot: 2, reward: 300,  damage: 35,  fireRate: 170, headshotMult: 4.0 },
-  usps:         { price: 200,  team: 'CT',  slot: 2, reward: 300,  damage: 35,  fireRate: 170, headshotMult: 4.0 },
-  p250:         { price: 300,  team: 'ANY', slot: 2, reward: 300,  damage: 38,  fireRate: 150, headshotMult: 4.0 },
-  deagle:       { price: 700,  team: 'ANY', slot: 2, reward: 300,  damage: 63,  fireRate: 260, headshotMult: 4.0 },
-  tec9:         { price: 500,  team: 'T',   slot: 2, reward: 300,  damage: 33,  fireRate: 120, headshotMult: 4.0 },
-  fiveseven:    { price: 500,  team: 'CT',  slot: 2, reward: 300,  damage: 32,  fireRate: 150, headshotMult: 4.0 },
-  cz75:         { price: 500,  team: 'ANY', slot: 2, reward: 100,  damage: 31,  fireRate: 100, headshotMult: 4.0 },
-  dualberettas: { price: 400,  team: 'ANY', slot: 2, reward: 300,  damage: 38,  fireRate: 120, headshotMult: 4.0 },
-  revolver:     { price: 600,  team: 'ANY', slot: 2, reward: 300,  damage: 86,  fireRate: 400, headshotMult: 4.0 },
+  glock: { price: 200, team: 'T', slot: 2, reward: 300, damage: 28, fireRate: 150, headshotMult: 4.0 },
+  usp: { price: 200, team: 'CT', slot: 2, reward: 300, damage: 35, fireRate: 170, headshotMult: 4.0 },
+  usps: { price: 200, team: 'CT', slot: 2, reward: 300, damage: 35, fireRate: 170, headshotMult: 4.0 },
+  p250: { price: 300, team: 'ANY', slot: 2, reward: 300, damage: 38, fireRate: 150, headshotMult: 4.0 },
+  deagle: { price: 700, team: 'ANY', slot: 2, reward: 300, damage: 63, fireRate: 260, headshotMult: 4.0 },
+  tec9: { price: 500, team: 'T', slot: 2, reward: 300, damage: 33, fireRate: 120, headshotMult: 4.0 },
+  fiveseven: { price: 500, team: 'CT', slot: 2, reward: 300, damage: 32, fireRate: 150, headshotMult: 4.0 },
+  cz75: { price: 500, team: 'ANY', slot: 2, reward: 100, damage: 31, fireRate: 100, headshotMult: 4.0 },
+  dualberettas: { price: 400, team: 'ANY', slot: 2, reward: 300, damage: 38, fireRate: 120, headshotMult: 4.0 },
+  revolver: { price: 600, team: 'ANY', slot: 2, reward: 300, damage: 86, fireRate: 400, headshotMult: 4.0 },
 
   // Rifles (Slot 1)
-  ak47:         { price: 2700, team: 'T',   slot: 1, reward: 300,  damage: 36,  fireRate: 100, headshotMult: 4.0 },
-  m4a4:         { price: 3100, team: 'CT',  slot: 1, reward: 300,  damage: 33,  fireRate: 90,  headshotMult: 4.0 },
-  m4a1:         { price: 2900, team: 'CT',  slot: 1, reward: 300,  damage: 38,  fireRate: 100, headshotMult: 4.0 },
-  m4a1s:        { price: 2900, team: 'CT',  slot: 1, reward: 300,  damage: 38,  fireRate: 100, headshotMult: 4.0 },
-  galil:        { price: 1800, team: 'T',   slot: 1, reward: 300,  damage: 30,  fireRate: 90,  headshotMult: 4.0 },
-  famas:        { price: 2050, team: 'CT',  slot: 1, reward: 300,  damage: 30,  fireRate: 90,  headshotMult: 4.0 },
-  aug:          { price: 3300, team: 'CT',  slot: 1, reward: 300,  damage: 28,  fireRate: 90,  headshotMult: 4.0 },
-  sg553:        { price: 3000, team: 'T',   slot: 1, reward: 300,  damage: 30,  fireRate: 90,  headshotMult: 4.0 },
+  ak47: { price: 2700, team: 'T', slot: 1, reward: 300, damage: 36, fireRate: 100, headshotMult: 4.0 },
+  m4a4: { price: 3100, team: 'CT', slot: 1, reward: 300, damage: 33, fireRate: 90, headshotMult: 4.0 },
+  m4a1: { price: 2900, team: 'CT', slot: 1, reward: 300, damage: 38, fireRate: 100, headshotMult: 4.0 },
+  m4a1s: { price: 2900, team: 'CT', slot: 1, reward: 300, damage: 38, fireRate: 100, headshotMult: 4.0 },
+  galil: { price: 1800, team: 'T', slot: 1, reward: 300, damage: 30, fireRate: 90, headshotMult: 4.0 },
+  famas: { price: 2050, team: 'CT', slot: 1, reward: 300, damage: 30, fireRate: 90, headshotMult: 4.0 },
+  aug: { price: 3300, team: 'CT', slot: 1, reward: 300, damage: 28, fireRate: 90, headshotMult: 4.0 },
+  sg553: { price: 3000, team: 'T', slot: 1, reward: 300, damage: 30, fireRate: 90, headshotMult: 4.0 },
 
   // Snipers (Slot 1)
-  awp:          { price: 4750, team: 'ANY', slot: 1, reward: 100,  damage: 115, fireRate: 1450, headshotMult: 4.0 },
-  ssg08:        { price: 1700, team: 'ANY', slot: 1, reward: 300,  damage: 88,  fireRate: 1250, headshotMult: 4.0 },
-  g3sg1:        { price: 5000, team: 'T',   slot: 1, reward: 300,  damage: 80,  fireRate: 250, headshotMult: 4.0 },
-  scar20:       { price: 5000, team: 'CT',  slot: 1, reward: 300,  damage: 80,  fireRate: 250, headshotMult: 4.0 },
+  awp: { price: 4750, team: 'ANY', slot: 1, reward: 100, damage: 115, fireRate: 1450, headshotMult: 4.0 },
+  ssg08: { price: 1700, team: 'ANY', slot: 1, reward: 300, damage: 88, fireRate: 1250, headshotMult: 4.0 },
+  g3sg1: { price: 5000, team: 'T', slot: 1, reward: 300, damage: 80, fireRate: 250, headshotMult: 4.0 },
+  scar20: { price: 5000, team: 'CT', slot: 1, reward: 300, damage: 80, fireRate: 250, headshotMult: 4.0 },
 
   // SMGs (Slot 1 - $600 reward)
-  mac10:        { price: 1050, team: 'T',   slot: 1, reward: 600,  damage: 29,  fireRate: 75,  headshotMult: 4.0 },
-  mp9:          { price: 1250, team: 'CT',  slot: 1, reward: 600,  damage: 26,  fireRate: 70,  headshotMult: 4.0 },
-  mp7:          { price: 1500, team: 'ANY', slot: 1, reward: 600,  damage: 29,  fireRate: 80,  headshotMult: 4.0 },
-  mp5:          { price: 1500, team: 'ANY', slot: 1, reward: 600,  damage: 27,  fireRate: 80,  headshotMult: 4.0 },
-  mp5sd:        { price: 1500, team: 'ANY', slot: 1, reward: 600,  damage: 27,  fireRate: 80,  headshotMult: 4.0 },
-  ump45:        { price: 1200, team: 'ANY', slot: 1, reward: 600,  damage: 35,  fireRate: 90,  headshotMult: 4.0 },
-  p90:          { price: 2350, team: 'ANY', slot: 1, reward: 300,  damage: 26,  fireRate: 65,  headshotMult: 4.0 },
-  bizon:        { price: 1400, team: 'ANY', slot: 1, reward: 600,  damage: 27,  fireRate: 80,  headshotMult: 4.0 },
+  mac10: { price: 1050, team: 'T', slot: 1, reward: 600, damage: 29, fireRate: 75, headshotMult: 4.0 },
+  mp9: { price: 1250, team: 'CT', slot: 1, reward: 600, damage: 26, fireRate: 70, headshotMult: 4.0 },
+  mp7: { price: 1500, team: 'ANY', slot: 1, reward: 600, damage: 29, fireRate: 80, headshotMult: 4.0 },
+  mp5: { price: 1500, team: 'ANY', slot: 1, reward: 600, damage: 27, fireRate: 80, headshotMult: 4.0 },
+  mp5sd: { price: 1500, team: 'ANY', slot: 1, reward: 600, damage: 27, fireRate: 80, headshotMult: 4.0 },
+  ump45: { price: 1200, team: 'ANY', slot: 1, reward: 600, damage: 35, fireRate: 90, headshotMult: 4.0 },
+  p90: { price: 2350, team: 'ANY', slot: 1, reward: 300, damage: 26, fireRate: 65, headshotMult: 4.0 },
+  bizon: { price: 1400, team: 'ANY', slot: 1, reward: 600, damage: 27, fireRate: 80, headshotMult: 4.0 },
 
   // Shotguns (Slot 1 - $900 reward)
-  nova:         { price: 1050, team: 'ANY', slot: 1, reward: 900,  damage: 26,  fireRate: 900, headshotMult: 4.0 },
-  xm1014:       { price: 2000, team: 'ANY', slot: 1, reward: 900,  damage: 20,  fireRate: 240, headshotMult: 4.0 },
-  mag7:         { price: 1300, team: 'CT',  slot: 1, reward: 900,  damage: 30,  fireRate: 850, headshotMult: 4.0 },
-  sawedoff:     { price: 1100, team: 'T',   slot: 1, reward: 900,  damage: 32,  fireRate: 850, headshotMult: 4.0 },
+  nova: { price: 1050, team: 'ANY', slot: 1, reward: 900, damage: 26, fireRate: 900, headshotMult: 4.0 },
+  xm1014: { price: 2000, team: 'ANY', slot: 1, reward: 900, damage: 20, fireRate: 240, headshotMult: 4.0 },
+  mag7: { price: 1300, team: 'CT', slot: 1, reward: 900, damage: 30, fireRate: 850, headshotMult: 4.0 },
+  sawedoff: { price: 1100, team: 'T', slot: 1, reward: 900, damage: 32, fireRate: 850, headshotMult: 4.0 },
 
   // Heavy (Slot 1)
-  m249:         { price: 5200, team: 'ANY', slot: 1, reward: 300,  damage: 32,  fireRate: 80,  headshotMult: 4.0 },
-  negev:        { price: 1700, team: 'ANY', slot: 1, reward: 300,  damage: 35,  fireRate: 75,  headshotMult: 4.0 },
+  m249: { price: 5200, team: 'ANY', slot: 1, reward: 300, damage: 32, fireRate: 80, headshotMult: 4.0 },
+  negev: { price: 1700, team: 'ANY', slot: 1, reward: 300, damage: 35, fireRate: 75, headshotMult: 4.0 },
 
   // Equipment & Grenades
-  vest:         { price: 650,  team: 'ANY', slot: 'armor',  reward: 0 },
-  kevlar:       { price: 650,  team: 'ANY', slot: 'armor',  reward: 0 },
-  helmet:       { price: 1000, team: 'ANY', slot: 'helmet', reward: 0 },
-  vesthelm:     { price: 1000, team: 'ANY', slot: 'helmet', reward: 0 },
-  defuser:      { price: 400,  team: 'CT',  slot: 'kit',    reward: 0 },
-  flashbang:    { price: 200,  team: 'ANY', slot: 4, reward: 300, damage: 0 },
-  hegrenade:    { price: 300,  team: 'ANY', slot: 4, reward: 300, damage: 50, fireRate: 1000 },
-  smokegrenade: { price: 300,  team: 'ANY', slot: 4, reward: 300, damage: 0 },
-  molotov:      { price: 400,  team: 'T',   slot: 4, reward: 300, damage: 40, fireRate: 1000 },
-  incgrenade:   { price: 600,  team: 'CT',  slot: 4, reward: 300, damage: 40, fireRate: 1000 },
+  vest: { price: 650, team: 'ANY', slot: 'armor', reward: 0 },
+  kevlar: { price: 650, team: 'ANY', slot: 'armor', reward: 0 },
+  helmet: { price: 1000, team: 'ANY', slot: 'helmet', reward: 0 },
+  vesthelm: { price: 1000, team: 'ANY', slot: 'helmet', reward: 0 },
+  defuser: { price: 400, team: 'CT', slot: 'kit', reward: 0 },
+  flashbang: { price: 200, team: 'ANY', slot: 4, reward: 300, damage: 0 },
+  hegrenade: { price: 300, team: 'ANY', slot: 4, reward: 300, damage: 50, fireRate: 1000 },
+  smokegrenade: { price: 300, team: 'ANY', slot: 4, reward: 300, damage: 0 },
+  molotov: { price: 400, team: 'T', slot: 4, reward: 300, damage: 40, fireRate: 1000 },
+  incgrenade: { price: 600, team: 'CT', slot: 4, reward: 300, damage: 40, fireRate: 1000 },
 
   // Melee & Objective
-  knife:        { price: 0,    team: 'ANY', slot: 3, reward: 1500, damage: 45, fireRate: 400, headshotMult: 2.0 },
-  c4:           { price: 0,    team: 'T',   slot: 5, reward: 0 }
+  knife: { price: 0, team: 'ANY', slot: 3, reward: 1500, damage: 45, fireRate: 400, headshotMult: 2.0 },
+  c4: { price: 0, team: 'T', slot: 5, reward: 0 }
 };
 
 function isInsideBombsite(pos) {
   if (!pos) return null;
-  // Bombsite A: authentic site decal bounds (radius 8.5m around decal center 51.85, -108.7)
-  const distA = Math.hypot(pos.x - 51.85, pos.z - (-108.7));
-  const inA = (distA <= 8.5 && Math.abs((pos.y || 4.32) - 4.32) < 4.0) ||
-              (pos.x >= 42.0 && pos.x <= 62.0 && pos.z >= -118.0 && pos.z <= -100.0 && pos.y >= 1.5 && pos.y <= 8.0);
+  // Bombsite A: authentic site decal bounds (matching material_15 decal)
+  const inA = (pos.x >= 42.0 && pos.x <= 62.0 && pos.z >= -118.0 && pos.z <= -100.0 && (pos.y === undefined || (pos.y >= 1.5 && pos.y <= 8.0)));
   if (inA) return 'A';
 
-  // Bombsite B: authentic site decal bounds (radius 8.5m around decal center -72.0, -121.0)
-  const distB = Math.hypot(pos.x - (-72.0), pos.z - (-121.0));
-  const inB = (distB <= 8.5 && Math.abs((pos.y || 0) - 0.0) < 4.0) ||
-              (pos.x >= -80.0 && pos.x <= -64.0 && pos.z >= -128.0 && pos.z <= -114.0 && pos.y >= -1.5 && pos.y <= 4.5);
+  // Bombsite B: authentic site decal bounds (matching material_25 SandRoadTgtB decal)
+  const inB = (pos.x >= -80.0 && pos.x <= -64.0 && pos.z >= -128.0 && pos.z <= -114.0 && (pos.y === undefined || (pos.y >= -1.5 && pos.y <= 4.5)));
   if (inB) return 'B';
 
   return null;
@@ -260,7 +256,7 @@ class GameRoom {
             }));
             p.ws.close(1000, 'Idle Inactivity');
           }
-        } catch (e) {}
+        } catch (e) { }
         this.removePlayer(id);
       }
     }
@@ -741,11 +737,50 @@ class GameRoom {
     this.broadcast(snapshot);
   }
 
-  addPlayer(id, ws, callsign, team = 'CT') {
+  addPlayer(id, ws, callsign, team = 'CT', sessionId = null) {
     const isFirstPlayer = (this.players.size === 0);
     const cleanCallsign = (typeof callsign === 'string' && callsign.trim().length >= 2)
       ? callsign.trim().substring(0, 16).replace(/[<>&"']/g, '')
       : `Agent_${id.substring(0, 5)}`;
+
+    // Reconnection via persistent sessionId: rebind socket and maintain state without clone
+    if (sessionId) {
+      for (const [existingId, p] of this.players.entries()) {
+        if (p.sessionId === sessionId) {
+          this.logEvent('RECONNECT_SESSION', `Player ${cleanCallsign} (${id}) reconnected to session ${sessionId} (replacing socket ${existingId})`);
+          if (p.ws && p.ws !== ws) {
+            try { p.ws.close(1000, 'Replaced by new connection'); } catch (e) {}
+          }
+          p.ws = ws;
+          p.id = id;
+          p.callsign = cleanCallsign;
+          p.lastInputAt = Date.now();
+          this.players.delete(existingId);
+          this.players.set(id, p);
+
+          ws.send(JSON.stringify({
+            type: 'match_sync',
+            matchId: this.matchId,
+            playerId: id,
+            callsign: p.callsign,
+            team: p.team,
+            inMatch: p.inMatch,
+            money: p.money,
+            inventory: p.inventory,
+            activeWeapon: p.activeWeapon,
+            isAlive: p.isAlive,
+            pos: p.pos,
+            ctScore: this.ctScore,
+            tScore: this.tScore,
+            currentRound: this.currentRound,
+            phase: this.phase,
+            phaseTimer: this.phaseTimer,
+            phaseEndTime: this.phaseEndTime
+          }));
+          return;
+        }
+      }
+    }
 
     // Prune any existing stale player session with the same callsign
     for (const [existingId, p] of this.players.entries()) {
@@ -829,6 +864,7 @@ class GameRoom {
       pitch: 0,
       spawnIndex: 0,
       crouch: false,
+      sessionId: sessionId,
       lastInputAt: Date.now()
     };
 
@@ -997,7 +1033,7 @@ wss.on('connection', (ws, req) => {
 
     switch (packet.type) {
       case 'join':
-        dust2Room.addPlayer(playerId, ws, packet.callsign, packet.team);
+        dust2Room.addPlayer(playerId, ws, packet.callsign, packet.team, packet.sessionId);
         break;
 
       case 'player_input':
@@ -1006,7 +1042,7 @@ wss.on('connection', (ws, req) => {
           if (packet.pos) {
             const p = packet.pos;
             const inBounds = (typeof p.x === 'number' && typeof p.y === 'number' && typeof p.z === 'number' &&
-              p.x >= -96.0 && p.x <= 70.0 && p.y >= -14.0 && p.y <= 18.0 && p.z >= -138.0 && p.z <= 50.0);
+              p.x >= -105.0 && p.x <= 78.0 && p.y >= -14.0 && p.y <= 18.0 && p.z >= -148.0 && p.z <= 56.0);
             if (!inBounds) {
               dust2Room.logEvent('OUT_OF_BOUNDS', `${player.callsign} tried moving out of bounds (${p.x?.toFixed(1)}, ${p.y?.toFixed(1)}, ${p.z?.toFixed(1)})`);
               ws.send(JSON.stringify({
@@ -1431,7 +1467,7 @@ wss.on('connection', (ws, req) => {
         if (!player.inventory[2]) player.inventory[2] = (player.team === 'CT' ? 'usp' : 'glock');
         if (!player.inventory[3]) player.inventory[3] = 'knife';
         const hasWep = (player.inventory[1] === wepKey || player.inventory[2] === wepKey || wepKey === 'knife' ||
-                        (Array.isArray(player.inventory[4]) && player.inventory[4].includes(wepKey)));
+          (Array.isArray(player.inventory[4]) && player.inventory[4].includes(wepKey)));
         if (!hasWep && wepKey !== 'knife') {
           dust2Room.logEvent('DAMAGE_REJECT', `Player ${player.callsign} does not own weapon ${wepKey}`);
           break;
