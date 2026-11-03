@@ -1633,6 +1633,16 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'flash_detonated': {
+        if (!player || !packet.pos) break;
+        dust2Room.broadcast({
+          type: 'flash_detonated',
+          pos: packet.pos,
+          throwerId: playerId
+        }, playerId);
+        break;
+      }
+
       case 'drop_weapon': {
         if (!player || !player.isAlive || !packet.weaponId) break;
         player.lastInputAt = Date.now();
