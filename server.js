@@ -1060,55 +1060,31 @@ wss.on('connection', (ws, req) => {
         const targetTeam = (packet.team === 'T') ? 'T' : 'CT';
         if (player.team === targetTeam) break;
 
-        let otherT = 0, otherCT = 0;
-        for (const [pId, p] of dust2Room.players.entries()) {
-          if (pId !== playerId) {
-            if (p.team === 'T') otherT++;
-            else otherCT++;
-          }
-        }
-        const wouldBeT = (targetTeam === 'T') ? otherT + 1 : otherT;
-        const wouldBeCT = (targetTeam === 'CT') ? otherCT + 1 : otherCT;
-
-        if (Math.abs(wouldBeT - wouldBeCT) <= 1 || (otherT === 0 && otherCT === 0)) {
-          const oldTeam = player.team;
-          player.team = targetTeam;
-
-          // Rebuild baseline loadout for the new team
-          player.hasC4 = false;
-          player.hasDefuseKit = false;
-          player.inventory = {
-            1: null,
-            2: (targetTeam === 'CT' ? 'usp' : 'glock'),
-            3: 'knife',
-            4: [],
-            5: null
-          };
-          player.activeWeapon = player.inventory[2];
-
-          // Re-evaluate spawn position for the new team
-          const teamSpawns = DUST2_SPAWNS[targetTeam] || DUST2_SPAWNS.T;
-          const sp = teamSpawns[0];
-          player.pos = { x: sp.x, y: sp.y, z: sp.z };
-          player.yaw = sp.yaw;
-
-          dust2Room.logEvent('TEAM_SWAP', `${player.callsign} (${playerId}) switched from ${oldTeam} to ${targetTeam}`);
-
-          dust2Room.broadcast({
-            type: 'team_swapped',
-            id: playerId,
-            team: player.team,
-            pos: player.pos,
-            inventory: player.inventory
-          });
-        } else {
-          dust2Room.logEvent('TEAM_REJECT', `${player.callsign} (${playerId}) change to ${targetTeam} rejected (unbalanced: T=${otherT}, CT=${otherCT})`);
-          ws.send(JSON.stringify({
-            type: 'team_reject',
-            reason: `Teams would be unbalanced (${wouldBeT} T vs ${wouldBeCT} CT)`
-          }));
-        }
-        break;
+        const oldTeam = player.team;
+        player.team = targetTeam;
+        player.hasC4 = false;
+        player.hasDefuseKit = false;
+        player.inventory = {
+          1: null,
+          2: (targetTeam === 'CT' ? 'usp' : 'glock'),
+          3: 'knife',
+          4: [],
+          5: null
+        };
+        player.activeWeapon = player.inventory[2];
+        const teamSpawns = DUST2_SPAWNS[targetTeam] || DUST2_SPAWNS.T;
+        const sp = teamSpawns[0];
+        player.pos = { x: sp.x, y: sp.y, z: sp.z };
+        player.yaw = sp.yaw;
+        dust2Room.logEvent('TEAM_SWAP', player.callsign + ' (' + playerId + ') switched from ' + oldTeam + ' to ' + targetTeam);
+        dust2Room.broadcast({
+          type: 'team_swapped',
+          id: playerId,
+          team: player.team,
+          pos: player.pos,
+          inventory: player.inventory
+        });
+break;
       }
 
       case 'buy_item': {
