@@ -27,18 +27,18 @@ process.on('unhandledRejection', (reason) => {
 
 const DUST2_SPAWNS = {
   CT: [
-    { x: -5.0, y: -3.56, z: -98.0, yaw: Math.PI },
-    { x: -2.0, y: -3.56, z: -96.0, yaw: Math.PI },
-    { x: -8.0, y: -3.56, z: -96.0, yaw: Math.PI },
-    { x: -5.0, y: -3.56, z: -101.0, yaw: Math.PI },
-    { x: -1.0, y: -3.56, z: -100.0, yaw: Math.PI }
+    { x: -5.0, y: -1.36, z: -98.0, yaw: Math.PI },
+    { x: -2.0, y: -1.36, z: -96.0, yaw: Math.PI },
+    { x: -8.0, y: -1.36, z: -96.0, yaw: Math.PI },
+    { x: -5.0, y: -1.36, z: -101.0, yaw: Math.PI },
+    { x: -1.0, y: -1.36, z: -100.0, yaw: Math.PI }
   ],
   T: [
-    { x: -65.0, y: 7.96, z: 35.0, yaw: 0 },
-    { x: -61.0, y: 7.96, z: 33.0, yaw: 0 },
-    { x: -69.0, y: 7.96, z: 33.0, yaw: 0 },
-    { x: -65.0, y: 7.96, z: 38.0, yaw: 0 },
-    { x: -58.0, y: 7.96, z: 36.0, yaw: 0 }
+    { x: -65.0, y: 10.16, z: 35.0, yaw: 0 },
+    { x: -61.0, y: 10.16, z: 33.0, yaw: 0 },
+    { x: -69.0, y: 10.16, z: 33.0, yaw: 0 },
+    { x: -65.0, y: 10.16, z: 38.0, yaw: 0 },
+    { x: -58.0, y: 10.16, z: 36.0, yaw: 0 }
   ]
 };
 
@@ -398,6 +398,8 @@ class GameRoom {
 
     const startMoney = (kind === 'overtime') ? 10000 : 800;
 
+    let hCtIdx = 0;
+    let hTIdx = 0;
     for (const p of this.players.values()) {
       p.team = (p.team === 'CT') ? 'T' : 'CT';
       p.money = startMoney;
@@ -413,6 +415,12 @@ class GameRoom {
         4: [],
         5: null
       };
+      const spawns = DUST2_SPAWNS[p.team] || DUST2_SPAWNS.T;
+      const sIdx = (p.team === 'CT') ? (hCtIdx++ % spawns.length) : (hTIdx++ % spawns.length);
+      const sp = spawns[sIdx];
+      p.pos = { x: sp.x, y: sp.y, z: sp.z };
+      p.yaw = sp.yaw;
+      p.spawnIndex = sIdx;
       p.transactions = [{ type: 'halftime', amount: startMoney, balance: startMoney, reason: 'Halftime reset', t: Date.now() }];
     }
 
@@ -481,6 +489,7 @@ class GameRoom {
       p.health = 100;
       p.hasC4 = false;
       p.purchases = [];
+      p.purchasedThisRound = {};
       p.fired = {};
       p.roundDamage = 0;
 
@@ -685,6 +694,8 @@ class GameRoom {
   }
 
   endMatch(winnerSide) {
+    if (this.phase === 'match_over') return;
+    this.phase = 'match_over';
     const winner = winnerSide || (this.ctScore > this.tScore ? 'CT' : (this.tScore > this.ctScore ? 'T' : 'TIE'));
     const winnerTitle = (winner === 'CT') ? 'COUNTER-TERRORISTS WIN' : ((winner === 'T') ? 'TERRORISTS WIN' : 'MATCH TIED');
 
@@ -1133,13 +1144,15 @@ wss.on('connection', (ws, req) => {
         player.lastInputAt = Date.now();
         const targetTeam = (packet.team === 'T' || packet.team === 'CT') ? packet.team : (player.team === 'CT' ? 'T' : 'CT');
         player.team = targetTeam;
-        player.isAlive = true;
-        player.inMatch = true;
-        player.health = 100;
+        const canSpawn = (dust2Room.phase === 'freeze') || (dust2Room.players.size <= 1);
+        player.isAlive = canSpawn;
+        player.inMatch = canSpawn;
+        player.health = canSpawn ? 100 : 0;
         player.hasHelmet = false;
         player.armor = 0;
         player.hasDefuseKit = false;
         player.purchases = [];
+        player.purchasedThisRound = {};
         player.fired = {};
 
         let count = 0;
@@ -1304,6 +1317,9 @@ wss.on('connection', (ws, req) => {
         });
         if (player.transactions.length > 20) player.transactions.shift();
 
+        player.purchasedThisRound = player.purchasedThisRound || {};
+        player.purchasedThisRound[wepId] = { price, slot: wepDef.slot };
+
         dust2Room.logEvent('BUY_ACCEPT', `${player.callsign} bought ${wepId} for $${price}. Balance: $${player.money}`);
 
         ws.send(JSON.stringify({
@@ -1314,6 +1330,72 @@ wss.on('connection', (ws, req) => {
           armor: player.armor,
           hasHelmet: player.hasHelmet,
           hasDefuseKit: player.hasDefuseKit
+        }));
+        break;
+      }
+
+      case 'refund_item': {
+        if (!player || !player.isAlive) break;
+        player.lastInputAt = Date.now();
+        const now = Date.now();
+        const inBuyWindow = (dust2Room.phase === 'freeze') || (dust2Room.phase === 'live' && now <= dust2Room.buyEndsAt);
+        if (!inBuyWindow) {
+          const reason = 'Buy and refund period has expired';
+          ws.send(JSON.stringify({ type: 'refund_error', reason }));
+          break;
+        }
+
+        const wepId = packet.weaponId ? String(packet.weaponId).toLowerCase() : null;
+        if (!wepId) {
+          ws.send(JSON.stringify({ type: 'refund_error', reason: 'Invalid weapon ID' }));
+          break;
+        }
+
+        player.purchasedThisRound = player.purchasedThisRound || {};
+        const purchase = player.purchasedThisRound[wepId];
+        if (!purchase) {
+          const reason = `Weapon ${wepId} was not purchased in this round and cannot be refunded`;
+          ws.send(JSON.stringify({ type: 'refund_error', reason }));
+          break;
+        }
+
+        const slot = purchase.slot;
+        if (typeof slot === 'number') {
+          if (!player.inventory || player.inventory[slot] !== wepId) {
+            const reason = `Weapon ${wepId} is no longer in inventory to refund`;
+            ws.send(JSON.stringify({ type: 'refund_error', reason }));
+            break;
+          }
+          if (slot === 1) {
+            player.inventory[1] = null;
+          } else if (slot === 2) {
+            player.inventory[2] = player.team === 'CT' ? 'usp' : 'glock';
+          }
+          player.activeWeapon = player.inventory[1] || player.inventory[2] || 'knife';
+        }
+
+        const refundAmount = purchase.price || 0;
+        player.money = Math.min(16000, player.money + refundAmount);
+        delete player.purchasedThisRound[wepId];
+
+        player.transactions = player.transactions || [];
+        player.transactions.push({
+          type: 'refund',
+          amount: refundAmount,
+          balance: player.money,
+          reason: `Refunded ${wepId}`,
+          t: Date.now()
+        });
+        if (player.transactions.length > 20) player.transactions.shift();
+
+        dust2Room.logEvent('REFUND_ACCEPT', `${player.callsign} refunded ${wepId} (+$${refundAmount}). Balance: $${player.money}`);
+
+        ws.send(JSON.stringify({
+          type: 'refund_success',
+          weaponId: wepId,
+          refundAmount: refundAmount,
+          remainingMoney: player.money,
+          inventory: player.inventory
         }));
         break;
       }
@@ -1426,15 +1508,62 @@ wss.on('connection', (ws, req) => {
 
           dust2Room.logEvent('KILL', `${player.callsign} [${wepKey}${res.hitgroup === 'head' ? ' HS' : ''}] ${target.callsign} (Reward: +$$${reward})`);
 
+          const dropPos = target.pos || { x: 0, y: 0, z: 0 };
+          if (target.inventory) {
+            [1, 2].forEach(slot => {
+              const wepId = target.inventory[slot];
+              if (wepId) {
+                target.inventory[slot] = null;
+                const dropItem = {
+                  id: `drop_${wepId}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                  weaponId: wepId,
+                  slot: slot,
+                  pos: { x: dropPos.x + (Math.random() - 0.5) * 0.8, y: dropPos.y, z: dropPos.z + (Math.random() - 0.5) * 0.8 },
+                  droppedBy: target.id,
+                  droppedAt: Date.now()
+                };
+                dust2Room.droppedItems.push(dropItem);
+                dust2Room.broadcast({ type: 'item_dropped', item: dropItem });
+              }
+            });
+            if (Array.isArray(target.inventory[4]) && target.inventory[4].length > 0) {
+              const nade = target.inventory[4].shift();
+              if (nade) {
+                const dropItem = {
+                  id: `drop_${nade}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                  weaponId: nade,
+                  slot: 4,
+                  pos: { x: dropPos.x + (Math.random() - 0.5) * 0.8, y: dropPos.y, z: dropPos.z + (Math.random() - 0.5) * 0.8 },
+                  droppedBy: target.id,
+                  droppedAt: Date.now()
+                };
+                dust2Room.droppedItems.push(dropItem);
+                dust2Room.broadcast({ type: 'item_dropped', item: dropItem });
+              }
+            } else if (typeof target.inventory[4] === 'string' && target.inventory[4]) {
+              const nade = target.inventory[4];
+              target.inventory[4] = null;
+              const dropItem = {
+                id: `drop_${nade}_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                weaponId: nade,
+                slot: 4,
+                pos: { x: dropPos.x + (Math.random() - 0.5) * 0.8, y: dropPos.y, z: dropPos.z + (Math.random() - 0.5) * 0.8 },
+                droppedBy: target.id,
+                droppedAt: Date.now()
+              };
+              dust2Room.droppedItems.push(dropItem);
+              dust2Room.broadcast({ type: 'item_dropped', item: dropItem });
+            }
+          }
+
           if (target.hasC4) {
             target.hasC4 = false;
             dust2Room.c4CarrierId = null;
-            const dropPos = target.pos || { x: 0, y: 0, z: 0 };
             const c4Item = {
               id: `drop_c4_${Date.now()}`,
               weaponId: 'c4',
               slot: 5,
-              pos: dropPos,
+              pos: { x: dropPos.x + (Math.random() - 0.5) * 0.5, y: dropPos.y, z: dropPos.z + (Math.random() - 0.5) * 0.5 },
               droppedBy: target.id,
               droppedAt: Date.now()
             };
@@ -1542,7 +1671,15 @@ wss.on('connection', (ws, req) => {
           dust2Room.broadcast({
             type: 'c4_picked_up',
             carrierId: player.id,
-            carrierName: player.callsign
+            carrierName: player.callsign,
+            itemId: item.id
+          });
+          dust2Room.broadcast({
+            type: 'item_picked_up',
+            itemId: item.id,
+            weaponId: 'c4',
+            pickerId: player.id,
+            inventory: player.inventory
           });
           break;
         }
@@ -1581,13 +1718,22 @@ wss.on('connection', (ws, req) => {
         player.inventory[5] = 'c4';
 
         const c4Idx = dust2Room.droppedItems.findIndex(d => d.weaponId === 'c4');
+        const c4ItemId = (c4Idx !== -1) ? dust2Room.droppedItems[c4Idx].id : `c4_item_${Date.now()}`;
         if (c4Idx !== -1) dust2Room.droppedItems.splice(c4Idx, 1);
 
         dust2Room.logEvent('PICKUP_C4', `${player.callsign} picked up C4`);
         dust2Room.broadcast({
           type: 'c4_picked_up',
           carrierId: player.id,
-          carrierName: player.callsign
+          carrierName: player.callsign,
+          itemId: c4ItemId
+        });
+        dust2Room.broadcast({
+          type: 'item_picked_up',
+          itemId: c4ItemId,
+          weaponId: 'c4',
+          pickerId: player.id,
+          inventory: player.inventory
         });
         break;
       }

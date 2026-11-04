@@ -263,7 +263,7 @@ const CS16_WEAPONS = {
     name: 'Schmidt Scout',
     category: 'snipers',
     slot: 1,
-    price: 2750,
+    price: 1700,
     reward: 300,
     team: 'ANY',
     damage: 75,
