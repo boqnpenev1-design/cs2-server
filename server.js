@@ -1062,12 +1062,13 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'player_input':
       case 'movement': {
         if (!player || !player.isAlive || !player.inMatch) break;
         player.lastInputAt = Date.now();
         if (packet.pos) {
           const p = packet.pos;
-          const inBounds = (p.x >= -115.0 && p.x <= 85.0 && p.z >= -160.0 && p.z <= 65.0 && p.y >= -10.0 && p.y <= 25.0);
+          const inBounds = (p.x >= -115.0 && p.x <= 85.0 && p.z >= -170.0 && p.z <= 70.0 && p.y >= -12.0 && p.y <= 25.0);
           if (inBounds) {
             player.pos = { x: p.x, y: p.y, z: p.z };
           }
@@ -1075,6 +1076,7 @@ wss.on('connection', (ws, req) => {
         if (typeof packet.yaw === 'number') player.yaw = packet.yaw;
         if (typeof packet.pitch === 'number') player.pitch = packet.pitch;
         if (typeof packet.crouch === 'boolean') player.crouch = packet.crouch;
+        if (packet.weapon) player.weapon = packet.weapon;
         break;
       }
 
