@@ -48,7 +48,21 @@ const WEAPON_REGISTRY = Object.assign({}, CS16_WEAPONS, {
   kevlar: { price: 650, team: 'ANY', slot: 'armor', reward: 0 },
   helmet: { price: 1000, team: 'ANY', slot: 'helmet', reward: 0 },
   vesthelm: { price: 1000, team: 'ANY', slot: 'helmet', reward: 0 },
-  defuser: { price: 400, team: 'CT', slot: 'kit', reward: 0 }
+  defuser: { price: 400, team: 'CT', slot: 'kit', reward: 0 },
+  // Aliases for CS2 / CS:GO / client names
+  mp5sd: CS16_WEAPONS.mp5,
+  ssg08: CS16_WEAPONS.scout,
+  m4a4: CS16_WEAPONS.m4a1,
+  m4a1s: CS16_WEAPONS.m4a1,
+  p250: CS16_WEAPONS.p228,
+  sg553: CS16_WEAPONS.sg552,
+  dualberettas: CS16_WEAPONS.elite,
+  mag7: CS16_WEAPONS.m3,
+  sawedoff: CS16_WEAPONS.m3,
+  nova: CS16_WEAPONS.m3,
+  negev: CS16_WEAPONS.m249,
+  scar20: CS16_WEAPONS.g3sg1,
+  incgrenade: CS16_WEAPONS.molotov
 });
 
 function isInsideBombsite(pos) {
@@ -162,6 +176,31 @@ class GameRoom {
     }, 15000);
 
     this.logEvent('ROOM_START', `Simulation active. Match ID: ${this.matchId}`);
+  }
+
+  ensureSimulationRunning() {
+    if (this.tickInterval) return;
+    this.tickInterval = setInterval(() => {
+      try { this.updateClock(); } catch (err) { console.error('[SIMULATION EXCEPTION]:', err.stack); }
+    }, 100);
+    this.snapshotInterval = setInterval(() => {
+      try { this.broadcastSnapshot(); } catch (err) { console.error('[SNAPSHOT EXCEPTION]:', err.stack); }
+    }, 40);
+    this.heartbeatInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [id, p] of this.players.entries()) {
+        if (!p.ws || p.ws.readyState !== 1) { // 1 = WebSocket.OPEN
+          this.removePlayer(id);
+          continue;
+        }
+        if (p.lastInputAt && (now - p.lastInputAt > 45000)) {
+          this.logEvent('HEARTBEAT_DROP', `Player ${p.callsign} (${id}) timed out after 45s of total silence`);
+          try { p.ws.terminate(); } catch (e) {}
+          this.removePlayer(id);
+        }
+      }
+    }, 15000);
+    this.logEvent('ROOM_RESUME', `Simulation resumed. Match ID: ${this.matchId}`);
   }
 
   stopLoopsIfEmpty() {
@@ -582,6 +621,9 @@ class GameRoom {
       if (p.transactions.length > 20) p.transactions.shift();
     }
 
+    this.lastWinner = winnerTeam;
+    this.lastRoundReason = reason;
+    this.lastMvp = roundMvp;
     this.logEvent('ROUND_OVER', `Winner: ${winnerTeam} (${reason}). Score: CT ${this.ctScore} - ${this.tScore} T. MVP: ${roundMvp.name}`);
 
     this.broadcast({
@@ -772,6 +814,7 @@ class GameRoom {
   }
 
   addPlayer(id, ws, callsign, team = 'CT', sessionId = null) {
+    this.ensureSimulationRunning();
     if (this.emptyRoomGraceTimer) {
       clearTimeout(this.emptyRoomGraceTimer);
       this.emptyRoomGraceTimer = null;
@@ -1020,7 +1063,12 @@ const server = http.createServer((req, res) => {
       tScore: dust2Room.tScore,
       isOvertime: dust2Room.isOvertime,
       otNumber: dust2Room.otNumber,
+      serverTime: Date.now(),
       buyEndsAt: dust2Room.buyEndsAt,
+      buySecondsRemaining: Math.max(0, Math.ceil((dust2Room.buyEndsAt - Date.now()) / 1000)),
+      lastWinner: dust2Room.lastWinner || null,
+      lastRoundReason: dust2Room.lastRoundReason || null,
+      lastMvp: dust2Room.lastMvp || null,
       eventLog: dust2Room.eventLog.slice(-50)
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1080,6 +1128,82 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'select_team': {
+        if (!player) break;
+        player.lastInputAt = Date.now();
+        const targetTeam = (packet.team === 'T' || packet.team === 'CT') ? packet.team : (player.team === 'CT' ? 'T' : 'CT');
+        player.team = targetTeam;
+        player.isAlive = true;
+        player.inMatch = true;
+        player.health = 100;
+        player.hasHelmet = false;
+        player.armor = 0;
+        player.hasDefuseKit = false;
+        player.purchases = [];
+        player.fired = {};
+
+        let count = 0;
+        for (const [id, p] of dust2Room.players.entries()) {
+          if (p.team === targetTeam && id !== playerId) count++;
+        }
+        const spawnList = DUST2_SPAWNS[targetTeam] || DUST2_SPAWNS.CT;
+        const spawnIdx = count % spawnList.length;
+        const spawn = spawnList[spawnIdx];
+        player.pos = { x: spawn.x, y: spawn.y, z: spawn.z };
+        player.yaw = spawn.yaw;
+
+        const isT = (targetTeam === 'T');
+        let giveC4 = false;
+        if (isT) {
+          const hasC4Any = [...dust2Room.players.values()].some(p => p.hasC4 && p.isAlive && p.id !== playerId);
+          if (!hasC4Any) {
+            giveC4 = true;
+            dust2Room.c4CarrierId = playerId;
+          }
+        } else {
+          if (player.hasC4) {
+            player.hasC4 = false;
+            dust2Room.c4CarrierId = null;
+          }
+        }
+        player.hasC4 = giveC4;
+
+        player.inventory = {
+          1: null,
+          2: isT ? 'glock' : 'usp',
+          3: 'knife',
+          4: [],
+          5: giveC4 ? 'c4' : null
+        };
+        player.activeWeapon = player.inventory[2];
+
+        dust2Room.logEvent('SELECT_TEAM', `${player.callsign} (${playerId}) selected team ${targetTeam} at spawn index ${spawnIdx}`);
+
+        ws.send(JSON.stringify({
+          type: 'team_changed',
+          playerId: playerId,
+          team: targetTeam,
+          spawnIdx: spawnIdx,
+          pos: player.pos,
+          yaw: player.yaw,
+          hasC4: giveC4,
+          inventory: player.inventory,
+          activeWeapon: player.activeWeapon
+        }));
+
+        dust2Room.broadcast({
+          type: 'team_swapped',
+          playerId: playerId,
+          team: targetTeam,
+          callsign: player.callsign,
+          pos: player.pos,
+          inventory: player.inventory,
+          activeWeapon: player.activeWeapon
+        });
+        dust2Room.broadcastSnapshot();
+        break;
+      }
+
       case 'team_swap': {
         if (!player) break;
         player.lastInputAt = Date.now();
@@ -1119,6 +1243,7 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'buy_item':
       case 'buy_weapon': {
         if (!player || !player.isAlive) break;
         player.lastInputAt = Date.now();
