@@ -42,7 +42,7 @@ const DUST2_SPAWNS = {
   ]
 };
 
-// Merge authentic CS 1.6 stats with equipment definitions
+// Merge authentic CS stats with equipment definitions
 const WEAPON_REGISTRY = Object.assign({}, CS16_WEAPONS, {
   vest: { price: 650, team: 'ANY', slot: 'armor', reward: 0 },
   kevlar: { price: 650, team: 'ANY', slot: 'armor', reward: 0 },
@@ -53,15 +53,15 @@ const WEAPON_REGISTRY = Object.assign({}, CS16_WEAPONS, {
   mp5sd: CS16_WEAPONS.mp5,
   ssg08: CS16_WEAPONS.scout,
   m4a4: CS16_WEAPONS.m4a1,
-  m4a1s: CS16_WEAPONS.m4a1,
+  m4a1s: CS16_WEAPONS.m4a1s || CS16_WEAPONS.m4a1,
   p250: CS16_WEAPONS.p228,
   sg553: CS16_WEAPONS.sg552,
   dualberettas: CS16_WEAPONS.elite,
-  mag7: CS16_WEAPONS.m3,
-  sawedoff: CS16_WEAPONS.m3,
-  nova: CS16_WEAPONS.m3,
-  negev: CS16_WEAPONS.m249,
-  scar20: CS16_WEAPONS.g3sg1,
+  mag7: CS16_WEAPONS.mag7 || CS16_WEAPONS.m3,
+  sawedoff: CS16_WEAPONS.sawedoff || CS16_WEAPONS.m3,
+  nova: CS16_WEAPONS.nova || CS16_WEAPONS.m3,
+  negev: CS16_WEAPONS.negev || CS16_WEAPONS.m249,
+  scar20: CS16_WEAPONS.scar20 || CS16_WEAPONS.g3sg1,
   incgrenade: CS16_WEAPONS.molotov
 });
 
@@ -407,7 +407,10 @@ class GameRoom {
       p.armor = 0;
       p.hasDefuseKit = false;
       p.purchases = [];
+      p.purchasedThisRound = {};
       p.fired = {};
+      p.survivedRound = false;
+      p.isAlive = true;
       p.inventory = {
         1: null,
         2: (p.team === 'CT' ? 'usp' : 'glock'),
@@ -593,17 +596,23 @@ class GameRoom {
 
     // Compute Round MVP (player on winning team with most round damage)
     let roundMvp = null;
+    let mvpPlayer = null;
     let maxDamage = -1;
     for (const p of this.players.values()) {
       if (p.team === winnerTeam && p.roundDamage > maxDamage && p.roundDamage > 0) {
         maxDamage = p.roundDamage;
+        mvpPlayer = p;
         roundMvp = { name: p.callsign, reason: `most damage dealt (${p.roundDamage} dmg)` };
       }
     }
     if (!roundMvp) {
       const winPlayers = [...this.players.values()].filter(p => p.team === winnerTeam);
       const lucky = winPlayers.length > 0 ? winPlayers[0] : null;
+      mvpPlayer = lucky;
       roundMvp = lucky ? { name: lucky.callsign, reason: 'round contribution' } : { name: 'Player', reason: 'objective win' };
+    }
+    if (mvpPlayer) {
+      mvpPlayer.mvps = (mvpPlayer.mvps || 0) + 1;
     }
 
     for (const p of this.players.values()) {
@@ -792,6 +801,7 @@ class GameRoom {
         hasC4: p.hasC4,
         kills: p.kills,
         deaths: p.deaths,
+        mvps: p.mvps || 0,
         money: p.money,
         inventory: p.inventory,
         transactions: p.transactions ? p.transactions.slice(-5) : []
@@ -1393,6 +1403,7 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({
           type: 'refund_success',
           weaponId: wepId,
+          slot: slot,
           refundAmount: refundAmount,
           remainingMoney: player.money,
           inventory: player.inventory
